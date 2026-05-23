@@ -65,7 +65,7 @@ def evaluate(actor, critic, batchObservations, batchActions, logStd):
 
 def getAction(actor, observation, logStd):
     std = torch.exp(torch.clamp(logStd, -5, 2))
-    covarianceMatrix = torch.diag_embed(torch.exp(std))
+    covarianceMatrix = torch.diag_embed(std)
     mean = actor(observation)
     dist = torch.distributions.MultivariateNormal(mean, covarianceMatrix)
     action = dist.sample()

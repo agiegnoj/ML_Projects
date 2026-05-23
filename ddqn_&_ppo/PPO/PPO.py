@@ -92,13 +92,11 @@ def getRollout(actor, env, logStd, timeStepsPerBatch=1024, gamma=0.95):
     while t < timeStepsPerBatch:
         state, _ = env.reset()
         episodeRewards = []
-        t2 = 0
         done = False
         while not done:
             state = torch.tensor(state, dtype=torch.float32).flatten().unsqueeze(0)
             batchStates.append(state)
             t +=1
-            t2 +=1
 
             action, logProb = getAction(actor, state, logStd)
             action = action.squeeze(0).numpy()

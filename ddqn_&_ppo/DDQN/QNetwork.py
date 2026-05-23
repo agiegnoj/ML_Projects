@@ -9,8 +9,7 @@ class QNetwork(nn.Module):
             nn.ReLU(),
             nn.Linear(256, 256),
             nn.ReLU(),
-            nn.Linear(256, actionDim),
-            nn.Dropout(0.1)
+            nn.Linear(256, actionDim)
         )
 
     def forward(self, x):

@@ -12,8 +12,7 @@ class Network(nn.Module):
            nn.Tanh(),
            nn.Linear(256, 256),
            nn.Tanh(),
-           nn.Linear(256, numActions),
-           nn.Dropout(0.1)
+           nn.Linear(256, numActions)
        )
     def forward(self, x):
         return torch.tanh(self.layers(x))

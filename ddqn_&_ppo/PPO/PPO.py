@@ -69,7 +69,7 @@ def evaluate(actor, critic, batchObservations, batchActions, logStd):
     mean = torch.clamp(mean, -5, 5)
 
     covarianceMatrix = torch.diag(torch.exp(logStd))
-    dist = torch.distributions.Normal(mean, covarianceMatrix)
+    dist = torch.distributions.MultivariateNormal(mean, covarianceMatrix)
     logProbs = dist.log_prob(batchActions)
 
     V = critic(batchObservations).squeeze()
@@ -82,7 +82,7 @@ def getAction(actor, observation, logStd):
     mean = actor(observation)
     mean = torch.clamp(mean, -5, 5)
     covarianceMatrix = torch.diag(torch.exp(logStd))
-    dist = torch.distributions.Normal(mean, covarianceMatrix)
+    dist = torch.distributions.MultivariateNormal(mean, covarianceMatrix)
 
     action = dist.sample()
     logProb = dist.log_prob(action).sum(dim=-1)

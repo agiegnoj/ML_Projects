@@ -139,8 +139,9 @@ class MLP(nn.Module):
         self.seq = nn.Sequential(
             nn.Linear(modelDim, modelDim * 4),
             nn.ReLU(),
-            nn.Linear(modelDim * 4, modelDim),
             nn.Dropout(0.2)
+            nn.Linear(modelDim * 4, modelDim),
+            
         )
 
     def forward(self, x):

@@ -8,7 +8,7 @@ from QNetwork import *
 
 
 def training(batchSize=64, gamma=0.99, epsilon=1.0, tau=0.005, lr=3e-4, episodes=1000):
-    """DQN algorithm, quickly adaptle for different learning tasks"""
+    """DQN algorithm, quickly adaptable for different learning tasks"""
 
     env = gym.make()
 

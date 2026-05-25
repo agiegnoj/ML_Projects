@@ -18,60 +18,60 @@ def training(epochs=600, numUpdates=5, epsilon = 0.2, batchSize=1024, subBatchSi
     actor = Network(numObservations, numActions)
     critic = Network(numObservations, 1)
     logStd = torch.nn.Parameter(torch.zeros(numActions))
-    entropyCoeefficient = torch.nn.Parameter(torch.tensor([0.01], dtype=torch.float32))
+    entropyCoeefficient = torch.nn.Parameter(torch.tensor([0.001], dtype=torch.float32))
     optimizerActor = optim.Adam(list(actor.parameters()) + [logStd] + [entropyCoeefficient], lr=3e-4)
     optimizerCritic = optim.Adam(critic.parameters(), lr=3e-4)
 
-
     for epoch in tqdm(range(epochs)):
-         logStd.data.clamp(-1,2)
-         (batchStates, batchActions,
-          batchLogProbs, batchRewardsToGo) = getRollout(actor, env, logStd, timeStepsPerBatch=batchSize)
-         dataSet = TensorDataset(batchStates, batchActions, batchLogProbs, batchRewardsToGo)
-         dl = DataLoader(dataSet, batch_size=subBatchSize, shuffle=True)
+        (batchStates, batchActions,
+         batchLogProbs, batchRewardsToGo) = getRollout(actor, env, logStd, timeStepsPerBatch=batchSize)
+        dataSet = TensorDataset(batchStates, batchActions, batchLogProbs, batchRewardsToGo)
+        dl = DataLoader(dataSet, batch_size=subBatchSize, shuffle=True)
 
-         for bS, bA, bLP, bRTG in dl:
-             with torch.no_grad():
-                 V = critic(bS).squeeze()
-             advantages = bRTG - V
-             advantages = torch.clamp(advantages, -50, 50)
-             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-10)
+        for bS, bA, bLP, bRTG in dl:
+            with torch.no_grad():
+                V = critic(bS).squeeze()
+            advantages = bRTG - V
+            advantages = torch.clamp(advantages, -50, 50)
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-10)
 
-             for i in range(numUpdates):
-                 V, currentLogProbs, entropy = evaluate(actor, critic, bS, bA, logStd)
+            for i in range(numUpdates):
+                V, currentLogProbs, entropy = evaluate(actor, critic, bS, bA, logStd)
 
-                 logRatio = currentLogProbs - bLP
-                 logRatio = torch.clamp(logRatio, -20, 20)
-                 ratios = torch.exp(logRatio)
+                logRatio = currentLogProbs - bLP
+                logRatio = torch.clamp(logRatio, -20, 20)
+                ratios = torch.exp(logRatio)
 
-                 surrogate1 = ratios * advantages
-                 surrogate2 = torch.clamp(ratios, 1 - epsilon, 1 + epsilon) * advantages
-                 entropyLoss = entropy.mean()
-                 actorLoss = torch.mean(-torch.min(surrogate1, surrogate2)) - entropyCoeefficient*entropyLoss
-                 optimizerActor.zero_grad()
-                 actorLoss.backward()
+                surrogate1 = ratios * advantages
+                surrogate2 = torch.clamp(ratios, 1 - epsilon, 1 + epsilon) * advantages
+                entropyLoss = entropy.mean()
+                actorLoss = torch.mean(-torch.min(surrogate1, surrogate2)) - entropyCoeefficient * entropyLoss
+                optimizerActor.zero_grad()
+                actorLoss.backward()
 
-                 nn.utils.clip_grad_norm_(actor.parameters(), 1.0)
-                 optimizerActor.step()
+                nn.utils.clip_grad_norm_(actor.parameters(), 1.0)
+                optimizerActor.step()
 
-                 criterion = nn.MSELoss()
-                 criticLoss = criterion(V, bRTG)
-                 optimizerCritic.zero_grad()
-                 criticLoss.backward()
+                criterion = nn.MSELoss()
+                criticLoss = criterion(V, bRTG)
+                optimizerCritic.zero_grad()
+                criticLoss.backward()
 
-                 nn.utils.clip_grad_norm_(critic.parameters(), 1.0)
-                 optimizerCritic.step()
+                nn.utils.clip_grad_norm_(critic.parameters(), 1.0)
+                optimizerCritic.step()
 
     return actor
 
 
 def evaluate(actor, critic, batchObservations, batchActions, logStd):
+    logStd = torch.clamp(logStd, -1, 2)
+    std = torch.exp(logStd)
     mean = actor(batchObservations)
     mean = torch.clamp(mean, -5, 5)
 
-    covarianceMatrix = torch.diag(torch.exp(logStd))
-    dist = torch.distributions.MultivariateNormal(mean, covarianceMatrix)
-    logProbs = dist.log_prob(batchActions)
+    dist = torch.distributions.Normal(mean, std)
+    dist = torch.distributions.Independent(dist, 1)
+    logProbs = dist.log_prob(batchActions).sum(dim=-1)
 
     V = critic(batchObservations).squeeze()
 
@@ -79,15 +79,18 @@ def evaluate(actor, critic, batchObservations, batchActions, logStd):
 
 
 def getAction(actor, observation, logStd):
+    logStd = torch.clamp(logStd, -1, 2)
+    std = torch.exp(logStd)
     mean = actor(observation)
     mean = torch.clamp(mean, -5, 5)
-    covarianceMatrix = torch.diag(torch.exp(logStd))
-    dist = torch.distributions.MultivariateNormal(mean, covarianceMatrix)
+    dist = torch.distributions.Normal(mean, std)
+    dist = torch.distributions.Independent(dist, 1)
 
     action = dist.sample()
+    action = torch.clamp(action, -1, 1)
     logProb = dist.log_prob(action).sum(dim=-1)
 
-    return action.detach(), logProb.detach().numpy()
+    return action.detach(), logProb.detach()
 
 
 def getRollout(actor, env, logStd, timeStepsPerBatch=1024, gamma=0.95):
@@ -106,7 +109,7 @@ def getRollout(actor, env, logStd, timeStepsPerBatch=1024, gamma=0.95):
         while not done:
             state = torch.tensor(state, dtype=torch.float32).flatten().unsqueeze(0)
             batchStates.append(state)
-            t +=1
+            t += 1
 
             action, logProb = getAction(actor, state, logStd)
             action = action.squeeze(0).numpy()
@@ -122,10 +125,10 @@ def getRollout(actor, env, logStd, timeStepsPerBatch=1024, gamma=0.95):
         batchRewards.append(episodeRewards)
 
     for episodeRewards in batchRewards:
-        r= 0
+        r = 0
         episodeRewardsToGo = []
         for reward in reversed(episodeRewards):
-            r = reward + gamma *r
+            r = reward + gamma * r
             episodeRewardsToGo.append(r)
         episodeRewardsToGo.reverse()
 
@@ -135,7 +138,6 @@ def getRollout(actor, env, logStd, timeStepsPerBatch=1024, gamma=0.95):
     batchActions = torch.tensor(batchActions, dtype=torch.float32)
     batchLogProbs = torch.tensor(np.array(batchLogProbs), dtype=torch.float32)
     batchRewardsToGo = torch.tensor(batchRewardsToGo, dtype=torch.float32)
-
 
     return batchStates, batchActions, batchLogProbs, batchRewardsToGo
 

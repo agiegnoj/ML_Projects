@@ -1,4 +1,5 @@
 import gymnasium as gym
+import highway_env
 import numpy as np
 import torch.nn as nn
 import torch
@@ -9,8 +10,8 @@ from tqdm import tqdm
 from Network import Network
 
 def training(epochs=600, numUpdates=5, epsilon = 0.2, batchSize=1024, subBatchSize=64):
-    """PPO algorithm, quickly adaptable for different learning tasks"""
-    env = gym.make()
+    """PPO algorithm"""
+    env = getEnvironment()
     numActions = env.action_space.shape[0]
     obs, _ = env.reset()
 
@@ -18,11 +19,12 @@ def training(epochs=600, numUpdates=5, epsilon = 0.2, batchSize=1024, subBatchSi
     actor = Network(numObservations, numActions)
     critic = Network(numObservations, 1)
     logStd = torch.nn.Parameter(torch.zeros(numActions))
-    entropyCoeefficient = torch.nn.Parameter(torch.tensor([0.001], dtype=torch.float32))
-    optimizerActor = optim.Adam(list(actor.parameters()) + [logStd] + [entropyCoeefficient], lr=3e-4)
+    entropyCoeefficient = 0.001
+    optimizerActor = optim.Adam(list(actor.parameters()) + [logStd], lr=3e-4)
     optimizerCritic = optim.Adam(critic.parameters(), lr=3e-4)
 
     for epoch in tqdm(range(epochs)):
+        logStd.data.clamp(-1, 2)
         (batchStates, batchActions,
          batchLogProbs, batchRewardsToGo) = getRollout(actor, env, logStd, timeStepsPerBatch=batchSize)
         dataSet = TensorDataset(batchStates, batchActions, batchLogProbs, batchRewardsToGo)
@@ -64,7 +66,7 @@ def training(epochs=600, numUpdates=5, epsilon = 0.2, batchSize=1024, subBatchSi
 
 
 def evaluate(actor, critic, batchObservations, batchActions, logStd):
-    logStd = torch.clamp(logStd, -1, 2)
+    logStd = torch.clamp(logStd, -2,1)
     std = torch.exp(logStd)
     mean = actor(batchObservations)
     mean = torch.clamp(mean, -5, 5)
@@ -79,7 +81,7 @@ def evaluate(actor, critic, batchObservations, batchActions, logStd):
 
 
 def getAction(actor, observation, logStd):
-    logStd = torch.clamp(logStd, -1, 2)
+    logStd = torch.clamp(logStd, -2, 1)
     std = torch.exp(logStd)
     mean = actor(observation)
     mean = torch.clamp(mean, -5, 5)
@@ -142,6 +144,40 @@ def getRollout(actor, env, logStd, timeStepsPerBatch=1024, gamma=0.95):
     return batchStates, batchActions, batchLogProbs, batchRewardsToGo
 
 
+
+def getEnvironment():
+    env = gym.make(
+        'highway-v0',
+        render_mode='rgb_array',
+        config={
+                "collision_reward": -4,
+                "high_speed_reward": 0.9,
+                "lane_centering_reward":0.2,
+                "lane_change_reward": 0.4,
+                "reward_speed_range": [20, 30],
+                "action": {
+                    "type": "ContinuousAction",
+                    "longitudinal": True,
+                    "lateral": True
+                },
+                "offroad_terminal": True,
+                'duration': 30,
+                'policy_frequency': 5,
+                "observation": {
+                    "type": "Kinematics",
+                    "vehicles_count": 5,
+                    "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h"],
+                    "order": "sorted",
+                    "absolute": False,
+                    "normalize": True,
+                },
+                "vehicles_count": 15,
+                "vehicle_density": 1.5
+            }
+        )
+
+    return env
+
 if __name__ == "__main__":
-   agent = training()
+   agent = training(epochs=400)
    torch.save(agent.state_dict(), f"PPOAgent_{"baseModel"}_{"v1"}.pt")

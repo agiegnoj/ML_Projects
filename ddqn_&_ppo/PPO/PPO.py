@@ -18,7 +18,8 @@ def training(epochs=600, numUpdates=5, epsilon = 0.2, batchSize=1024, subBatchSi
     actor = Network(numObservations, numActions)
     critic = Network(numObservations, 1)
     logStd = torch.nn.Parameter(torch.zeros(numActions))
-    optimizerActor = optim.Adam(list(actor.parameters()) + [logStd], lr=3e-4)
+    entropyCoeefficient = torch.nn.Parameter(torch.tensor([0.01], dtype=torch.float32))
+    optimizerActor = optim.Adam(list(actor.parameters()) + [logStd] + [entropyCoeefficient], lr=3e-4)
     optimizerCritic = optim.Adam(critic.parameters(), lr=3e-4)
 
 
@@ -37,7 +38,7 @@ def training(epochs=600, numUpdates=5, epsilon = 0.2, batchSize=1024, subBatchSi
              advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-10)
 
              for i in range(numUpdates):
-                 V, currentLogProbs = evaluate(actor, critic, bS, bA, logStd)
+                 V, currentLogProbs, entropy = evaluate(actor, critic, bS, bA, logStd)
 
                  logRatio = currentLogProbs - bLP
                  logRatio = torch.clamp(logRatio, -20, 20)
@@ -45,7 +46,8 @@ def training(epochs=600, numUpdates=5, epsilon = 0.2, batchSize=1024, subBatchSi
 
                  surrogate1 = ratios * advantages
                  surrogate2 = torch.clamp(ratios, 1 - epsilon, 1 + epsilon) * advantages
-                 actorLoss = torch.mean(-torch.min(surrogate1, surrogate2))
+                 entropyLoss = entropy.mean()
+                 actorLoss = torch.mean(-torch.min(surrogate1, surrogate2)) - entropyCoeefficient*entropyLoss
                  optimizerActor.zero_grad()
                  actorLoss.backward()
 
@@ -74,8 +76,7 @@ def evaluate(actor, critic, batchObservations, batchActions, logStd):
 
     V = critic(batchObservations).squeeze()
 
-    return V, logProbs
-
+    return V, logProbs, dist.entropy()
 
 
 def getAction(actor, observation, logStd):

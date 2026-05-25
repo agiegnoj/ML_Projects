@@ -66,7 +66,6 @@ def training(epochs=600, numUpdates=5, epsilon = 0.2, batchSize=1024, subBatchSi
 
 
 def evaluate(actor, critic, batchObservations, batchActions, logStd):
-    std = torch.exp(logStd).clamp(1e-3, 1.0)
     mean = actor(batchObservations)
     mean = torch.clamp(mean, -5, 5)
 

@@ -32,14 +32,12 @@ def training(epochs=600, numUpdates=5, epsilon = 0.2, batchSize=1024, subBatchSi
             with torch.no_grad():
                 V = critic(bS).squeeze()
             advantages = bRTG - V
-            advantages = torch.clamp(advantages, -50, 50)
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-10)
 
             for i in range(numUpdates):
                 V, currentLogProbs, entropy = evaluate(actor, critic, bS, bA, logStd)
 
                 logRatio = currentLogProbs - bLP
-                logRatio = torch.clamp(logRatio, -20, 20)
                 ratios = torch.exp(logRatio)
 
                 surrogate1 = ratios * advantages
